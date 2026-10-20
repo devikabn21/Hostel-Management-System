@@ -1,0 +1,18 @@
+<?php
+require_once __DIR__ . '/includes/auth.php';
+$id = filter_var($_GET['id'] ?? null, FILTER_VALIDATE_INT);
+if (!$id) { flash('error', 'Choose a valid student record.'); redirect('students.php'); }
+$statement = db()->prepare('SELECT s.*, r.room_number, a.bed_number, a.allocated_at FROM students s LEFT JOIN room_allocations a ON a.student_id = s.id AND a.status = \'active\' LEFT JOIN rooms r ON r.id = a.room_id WHERE s.id = :id');
+$statement->execute(['id' => $id]);
+$student = $statement->fetch();
+if (!$student) { flash('error', 'Student record not found.'); redirect('students.php'); }
+$historyStatement = db()->prepare('SELECT r.room_number, a.bed_number, a.status, a.allocated_at, a.vacated_at FROM room_allocations a JOIN rooms r ON r.id = a.room_id WHERE a.student_id = :id ORDER BY a.allocated_at DESC');
+$historyStatement->execute(['id' => $id]);
+$history = $historyStatement->fetchAll();
+$pageTitle = 'Student profile';
+require __DIR__ . '/includes/header.php';
+?>
+<section class="page-heading"><div><a class="back-link" href="students.php">← Student directory</a><h1>Student profile</h1><p>Personal details, current placement, and allocation history.</p></div><a class="button button-secondary" href="edit_student.php?id=<?= e($id) ?>">✎ Edit profile</a></section>
+<div class="profile-grid"><section class="panel profile-panel"><div class="profile-hero"><span class="profile-avatar"><?= e(strtoupper(substr($student['full_name'], 0, 1))) ?></span><div><span class="eyebrow"><?= e($student['usn']) ?></span><h2><?= e($student['full_name']) ?></h2><p><?= e($student['department']) ?> <span>•</span> Semester <?= e($student['semester']) ?></p></div></div><div class="detail-grid"><?php foreach (['Email address' => 'email', 'Phone number' => 'phone', 'Gender' => 'gender', 'Registration date' => 'registration_date', 'Home address' => 'address', 'Guardian name' => 'guardian_name', 'Guardian phone' => 'guardian_phone'] as $label => $field): ?><div class="detail-item"><span><?= e($label) ?></span><strong><?= e($student[$field]) ?></strong></div><?php endforeach; ?></div></section><aside class="panel placement-panel"><span class="eyebrow">ROOM PLACEMENT</span><h2><?= $student['room_number'] ? 'Currently assigned' : 'No active allocation' ?></h2><?php if ($student['room_number']): ?><div class="room-badge"><span class="room-symbol">⌂</span><div><strong>Room <?= e($student['room_number']) ?></strong><small>Bed <?= e($student['bed_number']) ?></small></div></div><p class="muted">Allocated <?= e(date('M j, Y', strtotime($student['allocated_at']))) ?></p><?php else: ?><p class="muted">This student does not have a room yet.</p><?php endif; ?><a class="button button-secondary button-full" href="allocations.php">Manage allocations <span>→</span></a></aside></div>
+<section class="panel history-panel"><div class="panel-heading"><div><span class="eyebrow">RECORD</span><h2>Room history</h2></div></div><?php if (!$history): ?><p class="empty-inline">No room allocation history.</p><?php else: ?><div class="table-wrap"><table><thead><tr><th>ROOM</th><th>BED</th><th>ALLOCATED</th><th>VACATED</th><th>STATUS</th></tr></thead><tbody><?php foreach ($history as $item): ?><tr><td><?= e($item['room_number']) ?></td><td><?= e($item['bed_number']) ?></td><td><?= e(date('M j, Y', strtotime($item['allocated_at']))) ?></td><td><?= $item['vacated_at'] ? e(date('M j, Y', strtotime($item['vacated_at']))) : '—' ?></td><td><span class="badge <?= $item['status'] === 'active' ? 'badge-green' : 'badge-gray' ?>"><?= e(ucfirst($item['status'])) ?></span></td></tr><?php endforeach; ?></tbody></table></div><?php endif; ?></section>
+<?php require __DIR__ . '/includes/footer.php'; ?>
